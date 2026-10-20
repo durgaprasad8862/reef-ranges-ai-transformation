@@ -1,5 +1,5 @@
 import os, sqlite3, secrets, json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from flask import Flask, request, jsonify, render_template_string, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -18,6 +18,7 @@ def init_db():
   c.execute('CREATE TABLE IF NOT EXISTS enquiries(id INTEGER PRIMARY KEY, name TEXT, email TEXT, message TEXT, category TEXT, status TEXT, created_at TEXT)')
   c.execute('CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY, enquiry_id INTEGER, tour TEXT, tour_date TEXT, guests INTEGER, status TEXT, created_at TEXT)')
   c.execute('CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_enquiry ON bookings(enquiry_id)')
+  c.execute('CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY, action TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)')
 
 def classify(message):
  t=message.lower()
@@ -33,7 +34,8 @@ def protect():
 
 @app.get('/')
 def home():
- return render_template_string('''<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reef & Ranges Tours</title><style>body{font:16px system-ui;background:#f0f7f8;color:#14343a;margin:0}header{background:#075f68;color:white;padding:35px max(5%,calc((100% - 900px)/2))}main{max-width:900px;margin:30px auto;padding:0 20px}.panel{background:white;border-radius:14px;padding:25px;margin-bottom:18px;box-shadow:0 4px 18px #173a4015}input,textarea,select,button{display:block;width:100%;box-sizing:border-box;padding:12px;margin:8px 0 16px;border:1px solid #abc;border-radius:8px;font:inherit}button{background:#007f83;color:white;border:0;cursor:pointer}small{color:#53666a}</style><header><h1>Reef & Ranges Tours</h1><p>Explore Cairns, the reef and the rainforest • Fictional demonstration</p></header><main><div class="panel"><h2>Ask about a tour</h2><p>Our team reviews all enquiries. This demonstration does not send emails or accept payments.</p><form id="f"><label>Name<input name="name" required maxlength="80"></label><label>Email<input type="email" name="email" required maxlength="120"></label><label>Question<textarea name="message" required maxlength="2000"></textarea></label><button>Send enquiry</button></form><p id="result" role="status"></p></div><div class="panel"><h2>Quick answers</h2><p><b>What should I bring?</b> Sun protection, water and comfortable shoes.</p><p><b>Pickup and weather?</b> Staff confirm pickup details and any weather-related changes.</p></div><small>All business information is illustrative. Never enter real customer information.</small></main><script>document.getElementById('f').onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));let r=await fetch('/api/enquiries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});let j=await r.json();document.getElementById('result').textContent=r.ok?'Enquiry #'+j.id+' received. Status: '+j.status:(j.error||'Unable to submit');if(r.ok)e.target.reset()}</script></html>''')
+ from flask import render_template
+ return render_template('index.html')
 
 @app.post('/api/enquiries')
 def enquiry():
@@ -67,10 +69,13 @@ def book():
   c.execute('BEGIN IMMEDIATE')
   if not c.execute('SELECT id FROM enquiries WHERE id=?',(enquiry_id,)).fetchone():return jsonify(error='Enquiry not found'),404
   used=c.execute("SELECT COALESCE(SUM(guests),0) FROM bookings WHERE tour=? AND tour_date=? AND status='confirmed'",(tour,date)).fetchone()[0]
+  if date < datetime.now(timezone.utc).date().isoformat():return jsonify(error='Choose today or a future date'),400
   if used+guests>CAPACITY[tour]:return jsonify(error='Not enough seats; request staff review'),409
   try:
    cur=c.execute('INSERT INTO bookings(enquiry_id,tour,tour_date,guests,status,created_at) VALUES(?,?,?,?,?,?)',(enquiry_id,tour,date,guests,'confirmed',datetime.now(timezone.utc).isoformat()))
   except sqlite3.IntegrityError:return jsonify(error='This enquiry already has a booking'),409
+  c.execute('UPDATE enquiries SET status=? WHERE id=?',('booked',enquiry_id))
+  c.execute('INSERT INTO activity(action,detail,created_at) VALUES(?,?,?)',('booking_confirmed',f'{tour} | {date} | {guests} guests',datetime.now(timezone.utc).isoformat()))
   return jsonify(id=cur.lastrowid,status='confirmed'),201
 
 @app.get('/admin/report')
@@ -81,6 +86,28 @@ def report():
 @app.get('/api/faq')
 def faq():
  topic=request.args.get('topic','').lower();return jsonify(answer=FAQ.get(topic,'A team member will review your question.'),human_review=topic not in FAQ)
+
+
+@app.get('/api/tours')
+def tours():
+ return jsonify([{'id':'reef','name':TOURS['reef'],'capacity':12,'duration':'Full day','price_aud':249},{'id':'ranges','name':TOURS['ranges'],'capacity':8,'duration':'Full day','price_aud':189}])
+
+@app.get('/api/availability')
+def availability():
+ tour=request.args.get('tour','');day=request.args.get('date','')
+ try:datetime.strptime(day,'%Y-%m-%d')
+ except ValueError:return jsonify(error='Invalid date'),400
+ if tour not in TOURS:return jsonify(error='Invalid tour'),400
+ with conn() as c:
+  used=c.execute("SELECT COALESCE(SUM(guests),0) FROM bookings WHERE tour=? AND tour_date=? AND status='confirmed'",(tour,day)).fetchone()[0]
+ return jsonify(tour=tour,date=day,capacity=CAPACITY[tour],reserved=used,remaining=max(0,CAPACITY[tour]-used),note='Demo availability only; staff confirmation required')
+
+@app.get('/admin/bookings')
+def bookings_list():
+ with conn() as c:return jsonify([dict(x) for x in c.execute('SELECT b.*,e.name AS customer_name FROM bookings b JOIN enquiries e ON b.enquiry_id=e.id ORDER BY b.id DESC')])
+
+@app.get('/health')
+def health():return jsonify(status='ok',service='reef-ranges-mvp')
 
 init_db()
 if __name__=='__main__':app.run(host='127.0.0.1',port=5000,debug=False)

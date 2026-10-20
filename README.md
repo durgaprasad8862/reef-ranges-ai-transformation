@@ -1,33 +1,25 @@
-# Reef & Ranges Tours — AI Digital Transformation Assessment
+# Reef & Ranges — Premium Tourism MVP
 
-Fictional Cairns tour operator demonstration. All example records are synthetic. No external AI account, API key, real customer data, payment or email integration is used.
+A polished, mobile-responsive fictional Cairns tour website plus a working Flask operations backend, prepared for the Getup Solutions assessment.
+
+## Features
+- Editorial tourism landing page with tours, curated experiences, responsive layouts and enquiries
+- Working enquiry submission and rules-based classification, including human escalation
+- Safe FAQ assistant (predefined responses, no invented policies)
+- Password-protected staff dashboard, enquiry list, metrics and staff booking confirmation
+- Server-side capacity checks, duplicate-booking protection and demo availability lookup
+- SQLite persistence for local demos; synthetic data only
+- `/health` for deployment checks; automated API tests
 
 ## Run locally
+`python -m pip install -r requirements.txt`
+Set `SESSION_SECRET` and `ADMIN_PASSWORD` in your environment, then `python main.py`. Open http://127.0.0.1:5000. Run `pytest -q` for tests.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-export ADMIN_PASSWORD='replace-with-your-own-strong-demo-password'  # Windows PowerShell: $env:ADMIN_PASSWORD='...'
-export SESSION_SECRET='replace-with-long-random-secret'
-python app/main.py
-```
+## Deployment
+See [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Visit http://127.0.0.1:5000 . Admin uses JSON APIs: POST `/login` with `{"password":"..."}`; GET `/admin/enquiries`, POST `/admin/bookings`, GET `/admin/report`. Public POST `/api/enquiries` and GET `/api/faq?topic=weather`.
+## Transparency
+This is a functional **rules-based** MVP, not a live generative-AI integration. No external customer emails, payments, or real tour inventory are connected. The tour operator and all customer records are fictional. Tourism photos are externally loaded from Unsplash and may require internet access. Do not claim production readiness.
 
-## Tests
-`pytest -q`
-
-## Scope / safety
-- Rules-based enquiry classification is an **AI-ready stand-in**, not a live LLM. Unknown, sensitive and refund questions go to human review.
-- Bookings are staff-confirmed only, with transactional seat capacity checks and one booking per enquiry.
-- Admin session required for private data. This is a local MVP, **not production hardened**: add CSRF protection, rate limiting, TLS, persistent secret management, audit logging and data retention policy before internet deployment.
-- No automated outgoing customer communications; the workflow export models a manual approval queue.
-- No credentials included. Do not use ChatGPT session credentials or production accounts.
-- Commit history must be created by the applicant when they initialize and commit to their own repository. Do not represent generated files as past commits.
-
-## Workflow
-Import `workflow/enquiry_triage_n8n.json` into your own n8n test instance. It uses a webhook, a Code node and a webhook response. No credentials required. The output identifies classification and whether staff review is required. The app and workflow are separate demonstrations; connecting them requires explicit authorization and a secure endpoint.
-
-## AI use disclosure
-Drafted with ChatGPT (GPT-6) for architecture, code, tests, written audit, creative assets planning and presentation. No external LLM was connected. See `docs/AI_USE.md`. Review and customize all materials before claiming personal work.
+## AI-use note
+AI assistance was used to draft the Flask app, UI, documentation and tests. Human review is needed for security, integration and deployment, and the applicant must personally test, explain and disclose the assistance.
